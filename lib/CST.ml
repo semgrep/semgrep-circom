@@ -8,17 +8,16 @@
 open! Sexplib.Conv
 open Tree_sitter_run
 
-type int_ = Token.t (* pattern \d+ *)
-
-type string_immediate_elt_inside_double_quote =
-  Token.t (* pattern "[^\"\\\\\\n]+|\\\\\\r?\\n" *)
+type signal_visability = [
+    `Input of Token.t (* "input" *)
+  | `Output of Token.t (* "output" *)
+]
 
 type escape_sequence = Token.t
 
-type identifier = Token.t (* pattern [a-zA-Z$_][a-zA-Z0-9$_]* *)
+type int_ = Token.t (* pattern \d+ *)
 
-type string_immediate_elt_inside_quote =
-  Token.t (* pattern "[^'\\\\\\n]+|\\\\\\r?\\n" *)
+type identifier = Token.t (* pattern [a-zA-Z$_][a-zA-Z0-9$_]* *)
 
 type circom_version =
   Token.t (* pattern "\"?\\.? ?(\\d|\\*\
@@ -26,26 +25,16 @@ type circom_version =
   )+ ?(\\.(\\d|\\*\
   )+)?)?\"?" *)
 
-type signal_visability = [
-    `Input of Token.t (* "input" *)
-  | `Output of Token.t (* "output" *)
-]
+type string_immediate_elt_inside_double_quote =
+  Token.t (* pattern "[^\"\\\\\\n]+|\\\\\\r?\\n" *)
 
-type template_type = [
-    `Custom of Token.t (* "custom" *)
-  | `Para of Token.t (* "parallel" *)
-]
+type string_immediate_elt_inside_quote =
+  Token.t (* pattern "[^'\\\\\\n]+|\\\\\\r?\\n" *)
 
-type parameter_list = (
-    Token.t (* "(" *)
-  * (
-        identifier (*tok*)
-      * (Token.t (* "," *) * identifier (*tok*)) list (* zero or more *)
-      * Token.t (* "," *) option
-    )
-      option
-  * Token.t (* ")" *)
-)
+type parameter = [
+    `Id of identifier (*tok*)
+  | `Ellips of Token.t (* "..." *)
+]
 
 type signal_tags = (
     Token.t (* "{" *)
@@ -54,22 +43,27 @@ type signal_tags = (
   * Token.t (* "}" *)
 )
 
-type main_component_public_signals = (
-    Token.t (* "{" *)
-  * Token.t (* "public" *)
-  * Token.t (* "[" *)
-  * identifier (*tok*)
-  * (Token.t (* "," *) * identifier (*tok*)) list (* zero or more *)
-  * Token.t (* "," *) option
-  * Token.t (* "]" *)
-  * Token.t (* "}" *)
-)
+type circom_pragma_token = [
+    `Circom_circom_vers of (Token.t (* "circom" *) * circom_version (*tok*))
+  | `Circom_id of (Token.t (* "circom" *) * identifier (*tok*))
+]
+
+type template_type = [
+    `Custom of Token.t (* "custom" *)
+  | `Para of Token.t (* "parallel" *)
+]
 
 type anon_choice_id_3723479 = [
     `Id of identifier (*tok*)
   | `Member_exp of member_expression
   | `Array_access_exp of array_access_expression
 ]
+
+and anonymous_inputs = (
+    Token.t (* "(" *)
+  * argument_list option
+  * Token.t (* ")" *)
+)
 
 and argument_list = (
     expression
@@ -140,10 +134,12 @@ and binary_expression = [
 ]
 
 and call_expression = (
-    identifier (*tok*)
+    Token.t (* "parallel" *) option
+  * identifier (*tok*)
   * Token.t (* "(" *)
   * argument_list option
   * Token.t (* ")" *)
+  * anonymous_inputs option
 )
 
 and decrement_expression = (anon_choice_id_3723479 * Token.t (* "--" *))
@@ -153,6 +149,7 @@ and expression = [
         `Int of int_ (*tok*)
       | `Id of identifier (*tok*)
       | `Array of array_
+      | `Tuple of tuple
       | `Un_exp of unary_expression
       | `Bin_exp of binary_expression
       | `Tern_exp of ternary_expression
@@ -187,6 +184,14 @@ and ternary_expression = (
   * expression
 )
 
+and tuple = (
+    Token.t (* "(" *)
+  * expression
+  * (Token.t (* "," *) * expression) list (* zero or more *)
+  * Token.t (* "," *) option
+  * Token.t (* ")" *)
+)
+
 and unary_expression = [
     `BANG_exp of (Token.t (* "!" *) * expression)
   | `TILDE_exp of (Token.t (* "~" *) * expression)
@@ -217,16 +222,36 @@ type string_ = [
     )
 ]
 
-type circom_pragma_token = (Token.t (* "circom" *) * circom_version (*tok*))
+type parameter_list = (
+    Token.t (* "(" *)
+  * (
+        parameter
+      * (Token.t (* "," *) * parameter) list (* zero or more *)
+      * Token.t (* "," *) option
+    )
+      option
+  * Token.t (* ")" *)
+)
 
-type array_definition =
-  (Token.t (* "[" *) * expression * Token.t (* "]" *)) list (* one or more *)
+type main_component_public_signals = (
+    Token.t (* "{" *)
+  * Token.t (* "public" *)
+  * Token.t (* "[" *)
+  * parameter
+  * (Token.t (* "," *) * parameter) list (* zero or more *)
+  * Token.t (* "," *) option
+  * Token.t (* "]" *)
+  * Token.t (* "}" *)
+)
 
 type expression_statement = [
     `Exp_semi of (expression * Token.t (* ";" *))
   | `Ellips_SEMI of (Token.t (* "..." *) * Token.t (* ";" *))
   | `Ellips of Token.t (* "..." *)
 ]
+
+type array_definition =
+  (Token.t (* "[" *) * expression * Token.t (* "]" *)) list (* one or more *)
 
 type type_ = [
     `Signal of (
@@ -365,15 +390,19 @@ type source_file = [
 type circom_custom_templates_token (* inlined *) =
   Token.t (* "custom_templates" *)
 
+type ellipsis (* inlined *) = Token.t (* "..." *)
+
 type component (* inlined *) = Token.t (* "component" *)
 
 type circom (* inlined *) = Token.t (* "circom" *)
 
-type semicolon (* inlined *) = Token.t (* ";" *)
-
-type ellipsis (* inlined *) = Token.t (* "..." *)
+type custom (* inlined *) = Token.t (* "custom" *)
 
 type var (* inlined *) = Token.t (* "var" *)
+
+type semicolon (* inlined *) = Token.t (* ";" *)
+
+type parallel (* inlined *) = Token.t (* "parallel" *)
 
 type comment (* inlined *) = Token.t
 
@@ -387,8 +416,21 @@ type signal (* inlined *) = (
   * signal_tags option
 )
 
+type pragma_directive (* inlined *) = (
+    Token.t (* "pragma" *)
+  * [
+        `Circom_pragma_tok of circom_pragma_token
+      | `Circom_custom_templs_tok of Token.t (* "custom_templates" *)
+    ]
+  * Token.t (* ";" *)
+)
+
 type return_statement (* inlined *) = (
     Token.t (* "return" *) * expression * Token.t (* ";" *)
+)
+
+type include_directive (* inlined *) = (
+    Token.t (* "include" *) * string_ * Token.t (* ";" *)
 )
 
 type main_component_definition (* inlined *) = (
@@ -397,19 +439,6 @@ type main_component_definition (* inlined *) = (
   * main_component_public_signals option
   * Token.t (* "=" *)
   * call_expression
-  * Token.t (* ";" *)
-)
-
-type include_directive (* inlined *) = (
-    Token.t (* "include" *) * string_ * Token.t (* ";" *)
-)
-
-type pragma_directive (* inlined *) = (
-    Token.t (* "pragma" *)
-  * [
-        `Circom_pragma_tok of circom_pragma_token
-      | `Circom_custom_templs_tok of Token.t (* "custom_templates" *)
-    ]
   * Token.t (* ";" *)
 )
 
