@@ -474,3 +474,7 @@ type template_definition (* inlined *) = (
   * parameter_list
   * template_body
 )
+
+type extra = Comment of Loc.t * comment
+
+type extras = extra list
